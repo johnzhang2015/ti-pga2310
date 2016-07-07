@@ -1,0 +1,123 @@
+
+
+
+#define LED_PIN 13
+
+#define PGA_ZCEN_PIN     9
+#define PGA_MUTE_PIN     4
+#define PGA_CS_PIN      8
+#define PGA_SDATA_PIN   7
+#define PGA_SCK_PIN     5
+
+
+int val;
+int encoder0PinA = 11;
+int encoder0PinB = 10;
+int encoder0Pos = 130;
+int encoder0PinALast = LOW;
+int n = LOW;
+
+int volume_left, old_l;
+int volume_right, old_r;
+
+void pga2311_init(void)
+{
+  pinMode(PGA_CS_PIN,    OUTPUT);    // pga-chipselect pin
+  pinMode(PGA_SDATA_PIN, OUTPUT);    // pga-data-out (our data out to it) pin
+  pinMode(PGA_SCK_PIN,   OUTPUT);    // pga-clock pin
+
+  pinMode(PGA_ZCEN_PIN, OUTPUT); 
+pinMode (encoder0PinA,INPUT);
+   pinMode (encoder0PinB,INPUT);
+   Serial.begin (9600);
+}
+
+void pga2311_enable_zero_crossing_detection()
+{
+  digitalWrite(PGA_ZCEN_PIN, HIGH);
+}
+
+void pga2311_disable_zero_crossing_detection()
+{
+  digitalWrite(PGA_ZCEN_PIN, LOW);
+}
+
+void SPI_write(uint8_t out_spi_byte )
+{
+  uint8_t  i;
+
+  // loop thru each of the 8-bits in the byte
+  for (i=0; i < 8; i++) {
+
+    // strobe clock
+    digitalWrite(PGA_SCK_PIN, LOW);
+
+    // send the bit (we look at the high order bit and 'print' that to the remote device)
+    if (0x80 & out_spi_byte) {  // MSB is set
+      digitalWrite(PGA_SDATA_PIN, HIGH);
+    }
+    else {
+      digitalWrite(PGA_SDATA_PIN, LOW);
+    }
+
+    // unstrobe the clock via local SPI
+    digitalWrite(PGA_SCK_PIN, HIGH);
+
+    // get the next bit 
+    out_spi_byte <<= 1;   // left-shift the byte by 1 bit
+  }
+}
+
+void pga2311_mute()
+{
+  pga2311_set_volume(0, 0); 
+}
+
+
+void pga2311_set_volume( uint8_t left, uint8_t right )
+{
+  // Gain (dB) = 31.5 − [0.5 * (255 − N)]
+
+  digitalWrite(PGA_CS_PIN, LOW);     // assert CS
+
+  SPI_write(left);    // left value (0..255)
+  SPI_write(right);   // right value (0..255)
+
+  digitalWrite(PGA_CS_PIN, HIGH);    // deassert CS
+}
+
+
+
+void setup()   {
+  Serial.begin(9600);
+  Serial.println("PGA2311 Volume Control");
+
+  pinMode(LED_PIN, OUTPUT);
+
+  // set muting
+  pinMode(PGA_MUTE_PIN, OUTPUT); 
+  digitalWrite(PGA_MUTE_PIN, HIGH); // high -> not muted, low -> muted
+
+  pga2311_init();
+
+  // set zero crossing detection
+  pga2311_enable_zero_crossing_detection();
+
+}
+
+void loop()                   
+{
+  n = digitalRead(encoder0PinA);
+   if ((encoder0PinALast == LOW) && (n == HIGH)) {
+     if (digitalRead(encoder0PinB) == LOW) {
+       encoder0Pos--;
+     } else {
+       encoder0Pos++;
+     }
+     Serial.print (encoder0Pos);
+      pga2311_set_volume(encoder0Pos,encoder0Pos);
+     Serial.print ("/");
+   }
+   encoder0PinALast = n;
+
+}
